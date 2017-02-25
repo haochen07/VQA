@@ -526,7 +526,7 @@ def softmax(a, b):
 	return np.exp(a)/(np.exp(a) + np.exp(b))
 
 if __name__ == '__main__':
-	with tf.device('/gpu:'+str(0)):
-		train()
-	#with tf.device('/gpu:'+str(1)):
-	#	test()
+	#with tf.device('/gpu:'+str(0)):
+	#	train()
+	with tf.device('/gpu:'+str(1)):
+		test()
