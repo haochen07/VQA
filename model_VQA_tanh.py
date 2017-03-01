@@ -346,6 +346,9 @@ def train():
 	tf.initialize_all_variables().run()
 
 	print('start training...')
+	f1 = open("RecordLoss.txt", "w")
+	f2 = open("TestAcurracies", "w")
+
 	for itr in range(max_itr):
 		tStart = time.time()
 		# shuffle the training data
@@ -375,18 +378,25 @@ def train():
 		tStop = time.time()
 		if np.mod(itr, 100) == 0:
 			print ("Iteration: ", itr, " Loss: ", loss, " Learning Rate: ", lr.eval())
+			f1.write(str(itr) + '\t' + str(loss) + "\n")
 			#print ("Iteration: ", itr, " scores: ", scores, " label: ", current_target)
 			print ("Time Cost:", round(tStop - tStart,2), "s")
 		if np.mod(itr, 1800) == 0:
 			print ("Iteration ", itr, " is done. Saving the model ...")
 			saver.save(sess, os.path.join(checkpoint_path, 'model'), global_step=itr)
+			# Test while train
+			acc = test(model_path = checkpoint_path + 'model-' + str(itr))
+			f2.write(str(itr) + '\t' + str(acc) + "\n")
 
 	print ("Finally, saving the model ...")
+	f1.close()
+	f2.close()
 	saver.save(sess, os.path.join(checkpoint_path, 'model'), global_step=n_epochs)
 	tStop_total = time.time()
 	print ("Total Time Cost:", round(tStop_total - tStart_total,2), "s")
 
 def test(model_path='model_save/model-1800'):
+	print ('############################')
 	print ('loading dataset...')
 	dataset, img_feature, test_data = get_data_test()
 	num_test = test_data['question'].shape[0]
@@ -486,10 +496,14 @@ def test(model_path='model_save/model-1800'):
 	# Save to JSON
 	print ('Saving result...')
 	acc = 0
-	for k,v in result.iteritems():
+	for k,v in result.items():
 		acc += v[0]
-	print(str(acc*1.0/len(result)))
+	testAcc = acc*1.0/len(result)
+	print("Test Accuracy: " + str(testAcc))
 	dd = json.dump(result,open('data.json','w'))
+	print ('############################')
+
+	return testAcc
 
 def getMaximumLikelihood(raw_target, raw_prob):
 	target = np.zeros((250,))
