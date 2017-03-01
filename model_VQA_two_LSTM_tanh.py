@@ -275,8 +275,6 @@ def get_data():
 		tem = np.sqrt(np.sum(np.multiply(img_feature, img_feature), axis=1))
 		img_feature = np.divide(img_feature, np.transpose(np.tile(tem,(4096,1))))
 
-	
-
 	return dataset, img_feature, train_data
 
 def get_data_test():

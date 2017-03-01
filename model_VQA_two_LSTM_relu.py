@@ -162,7 +162,7 @@ class Answer_Generator():
 		# multimodal (fusing question & image)
 		Q_drop = tf.nn.dropout(state_q, 1-self.drop_out_rate)
 		Q_linear = tf.nn.xw_plus_b(Q_drop, self.embed_Q_W, self.embed_Q_b)
-		Q_emb = tf.nn。relu(Q_linear)
+		Q_emb = tf.nn.relu(Q_linear)
 
 		image_drop = tf.nn.dropout(image, 1-self.drop_out_rate)
 		image_linear = tf.nn.xw_plus_b(image_drop, self.embed_image_W, self.embed_image_b)
@@ -368,6 +368,9 @@ def train():
 	tf.initialize_all_variables().run()
 
 	print('start training...')
+	f1 = open("RecordLoss.txt", "w")
+	f2 = open("TestAcurracies", "w")
+
 	for itr in range(max_itr):
 		tStart = time.time()
 		# shuffle the training data
@@ -397,18 +400,25 @@ def train():
 		tStop = time.time()
 		if np.mod(itr, 100) == 0:
 			print ("Iteration: ", itr, " Loss: ", loss, " Learning Rate: ", lr.eval())
+			f1.write(str(itr) + '\t' + str(loss) + "\n")
 			#print ("Iteration: ", itr, " scores: ", scores, " label: ", current_target)
 			print ("Time Cost:", round(tStop - tStart,2), "s")
 		if np.mod(itr, 2500) == 0:
 			print ("Iteration ", itr, " is done. Saving the model ...")
 			saver.save(sess, os.path.join(checkpoint_path, 'model'), global_step=itr)
+			# Test while train
+			acc = test(model_path = checkpoint_path + 'model-' + str(itr))
+			f2.write(str(itr) + '\t' + str(acc) + "\n")
 
 	print ("Finally, saving the model ...")
+	f1.close()
+	f2.close()
 	saver.save(sess, os.path.join(checkpoint_path, 'model'), global_step=n_epochs)
 	tStop_total = time.time()
 	print ("Total Time Cost:", round(tStop_total - tStart_total,2), "s")
 
-def test(model_path='model_save/model-40000'):
+def test(model_path='model_save/model-27500'):
+	print ('############################')
 	print ('loading dataset...')
 	dataset, img_feature, test_data = get_data_test()
 	num_test = test_data['question'].shape[0]
@@ -439,8 +449,7 @@ def test(model_path='model_save/model-40000'):
 	tStart_total = time.time()
 	result = {}
 
-	for current_batch_start_idx in xrange(0, num_test-1, batch_size):
-	#for current_batch_start_idx in xrange(0,3,batch_size):
+	for current_batch_start_idx in list(range(0, num_test, batch_size)):
 		tStart = time.time()
 		# set data into current*
 		if current_batch_start_idx + batch_size < num_test:
@@ -510,8 +519,13 @@ def test(model_path='model_save/model-40000'):
 	acc = 0
 	for k,v in result.items():
 		acc += v[0]
-	print(str(acc*1.0/len(result)))
+	testAcc = acc*1.0/len(result)
+	print("Test Accuracy: " + str(testAcc))
 	dd = json.dump(result,open('data.json','w'))
+	print ('############################')
+
+	return testAcc
+
 
 def getMaximumLikelihood(raw_target, raw_prob):
 	target = np.zeros((500,))
