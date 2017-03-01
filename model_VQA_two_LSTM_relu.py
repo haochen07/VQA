@@ -335,6 +335,8 @@ def get_data_test():
 def train():
 	print('loading dataset...')
 	dataset, img_feature, train_data = get_data()
+	dataset_test, img_feature_test, test_data = get_data_test()
+
 	num_train = train_data['question'].shape[0]
 	vocabulary_size = len(dataset['ix_to_word'].keys())
 	print('vocabulary_size : ' + str(vocabulary_size))
@@ -403,12 +405,85 @@ def train():
 			f1.write(str(itr) + '\t' + str(loss) + "\n")
 			#print ("Iteration: ", itr, " scores: ", scores, " label: ", current_target)
 			print ("Time Cost:", round(tStop - tStart,2), "s")
+
 		if np.mod(itr, 2500) == 0:
 			print ("Iteration ", itr, " is done. Saving the model ...")
 			saver.save(sess, os.path.join(checkpoint_path, 'model'), global_step=itr)
-			# Test while train
-			acc = test(model_path = checkpoint_path + 'model-' + str(itr))
-			f2.write(str(itr) + '\t' + str(acc) + "\n")
+			
+			######################
+			## Test while train
+			#######################
+
+			num_test = test_data['question'].shape[0]
+			vocabulary_size = len(dataset_test['ix_to_word'].keys())
+			tf_proba_test, tf_image_test, tf_question_test, tf_answer_test = model.build_generator()
+
+			result = {}
+
+			for current_batch_start_idx in list(range(0, num_test, batch_size)):
+				if current_batch_start_idx + batch_size < num_test:
+					current_batch_file_idx = range(current_batch_start_idx, current_batch_start_idx + batch_size)
+				else:
+					current_batch_file_idx = range(current_batch_start_idx, num_test)
+
+				current_question = test_data['question'][current_batch_file_idx,:]
+				current_length_q = test_data['length_q'][current_batch_file_idx]
+				current_img_list = test_data['img_list'][current_batch_file_idx]
+				current_answer = test_data['answer'][current_batch_file_idx,:]
+				current_length_a = test_data['length_a'][current_batch_file_idx]
+				current_ques_id  = test_data['ques_id'][current_batch_file_idx]
+				current_target = test_data['target'][current_batch_file_idx]
+				current_img = img_feature[current_img_list,:] # (batch_size, dim_image)
+
+				if(len(current_img)<500):
+					pad_img = np.zeros((500-len(current_img),dim_image),dtype=np.int)
+					pad_q = np.zeros((500-len(current_img),max_words_q),dtype=np.int)
+					pad_q_len = np.zeros(500-len(current_length_q),dtype=np.int)
+					pad_q_id = np.zeros(500-len(current_length_q),dtype=np.int)
+					pad_img_list = np.zeros(500-len(current_length_q),dtype=np.int)
+					pad_a = np.zeros((500-len(current_img),max_words_q),dtype=np.int)
+					pad_a_len = np.zeros(500-len(current_length_a),dtype=np.int)
+					pad_target = np.zeros((500-len(current_target), 2),dtype=np.int)
+					current_img = np.concatenate((current_img, pad_img))
+					current_question = np.concatenate((current_question, pad_q))
+					current_length_q = np.concatenate((current_length_q, pad_q_len))
+					current_ques_id = np.concatenate((current_ques_id, pad_q_id))
+					current_img_list = np.concatenate((current_img_list, pad_img_list))
+					current_answer = np.concatenate((current_answer, pad_a))
+					current_length_a = np.concatenate((current_length_a, pad_a_len))
+					current_target = np.concatenate((current_target, pad_target))
+
+				pred_proba = sess.run(
+						tf_proba_test,
+						feed_dict={
+							tf_image_test: current_img,
+							tf_question_test: current_question,
+							tf_answer_test: current_answer
+							})
+
+				# initialize json list
+				pred_proba = np.transpose(pred_proba)
+				assert(current_target.shape == (500,2))
+				assert(pred_proba.shape == (500,2))
+
+				target, prob = getMaximumLikelihood(current_target, pred_proba)
+
+				for i in list(range(0, 500)):
+					if str(current_ques_id[i]) not in result:
+						result[str(current_ques_id[i])] = [target[i], prob[i]]
+					else:
+						if result[str(current_ques_id[i])][1] < prob[i]:
+							result[str(current_ques_id[i])] = [target[i], prob[i]]
+
+			acc = 0
+			for k,v in result.items():
+				acc += v[0]
+			testAcc = acc*1.0/len(result)
+			print("Test Accuracy: " + str(testAcc))
+
+			#######################
+
+			f2.write(str(itr) + '\t' + str(testAcc) + "\n")
 
 	print ("Finally, saving the model ...")
 	f1.close()
@@ -418,7 +493,6 @@ def train():
 	print ("Total Time Cost:", round(tStop_total - tStart_total,2), "s")
 
 def test(model_path='model_save/model-27500'):
-	print ('############################')
 	print ('loading dataset...')
 	dataset, img_feature, test_data = get_data_test()
 	num_test = test_data['question'].shape[0]
@@ -522,10 +596,6 @@ def test(model_path='model_save/model-27500'):
 	testAcc = acc*1.0/len(result)
 	print("Test Accuracy: " + str(testAcc))
 	dd = json.dump(result,open('data.json','w'))
-	print ('############################')
-
-	return testAcc
-
 
 def getMaximumLikelihood(raw_target, raw_prob):
 	target = np.zeros((500,))
@@ -540,7 +610,7 @@ def softmax(a, b):
 	return np.exp(a)/(np.exp(a) + np.exp(b))
 
 if __name__ == '__main__':
-	#with tf.device('/gpu:'+str(0)):
-	#	train()
-	with tf.device('/gpu:'+str(1)):
-		test()
+	with tf.device('/gpu:'+str(0)):
+		train()
+	#with tf.device('/gpu:'+str(1)):
+	#	test()
